@@ -7,18 +7,27 @@ function wait(ms = 200) {
 
 const jdb = new Jdb();
 
-(async function() {
+(function() {
 
     jdb.launch("Main", {
         workingDir: resolve(__dirname, "..", "java")
     })
-
-    await wait();
-
-    await jdb.step();
-    await jdb.step();
-    await jdb.step();
-
-    console.log("!!! finisehd");
-    process.exit(0);
+    .then(_ => jdb.stopAt("Main", 4))
+    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.stopAt("Main", 42))
+    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.cont())
+    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.stopAt("Main", 7))
+    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.step())
+    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.cont())
+    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.cont())
+    .then(_ => console.dir(jdb.getState()))
+    .then(_ => {
+        process.exit(0);
+    })
+    .catch(e => console.error(e));
 })();

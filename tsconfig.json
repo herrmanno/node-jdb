@@ -4,9 +4,11 @@
 		"module": "commonjs",
 		"moduleResolution": "node",
 		"outDir": "out",
-		"sourceMap": true
+		"sourceMap": true,
+		"declaration": true
 	},
 	"exclude": [
+		"out",
 		"node_modules"
 	]
 }
