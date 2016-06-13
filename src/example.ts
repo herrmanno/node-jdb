@@ -10,7 +10,7 @@ const jdb = new Jdb();
 (function() {
 
     jdb.launch("Main", {
-        workingDir: resolve(__dirname, "..", "java")
+        workingDir: resolve(__dirname, "..", "..", "java")
     })
     .then(_ => jdb.stopAt("Main", 4))
     .then(_ => console.dir(jdb.getState()))
@@ -29,5 +29,7 @@ const jdb = new Jdb();
     .then(_ => {
         process.exit(0);
     })
-    .catch(e => console.error(e));
+    .catch(e => {
+        console.error(e)
+    });
 })();

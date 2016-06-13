@@ -2,7 +2,8 @@ import {spawn, SpawnOptions, ChildProcess} from "child_process"
 import {createInterface, ReadLine} from "readline"
 
 export interface LaunchOptions {
-    workingDir?: string
+    workingDir?: string;
+    classPath?: string;
 }
 
 interface LineProcessResult {
@@ -57,6 +58,10 @@ export class Jdb {
         if(options) {
             if(options.workingDir) {
                 spawnOptions.cwd = options.workingDir
+            }
+            if(options.classPath) {
+                jdbOptions.push("-classpath");
+                jdbOptions.push(options.classPath);
             }
         }
 
@@ -141,6 +146,16 @@ export class Jdb {
             };
             this.processor = new ContLineProcessor();
             this.write(`cont\n`);
+        });
+    }
+
+    public where(threadId: number = 1): Promise<any> {
+        return new Promise((resolve, reject) => {
+            this.readingFinish = () => {
+                resolve();
+            };
+            this.processor = new WhereLineProcessor();
+            this.write(`where ${threadId}\n`);
         });
     }
 
@@ -298,5 +313,23 @@ class ContLineProcessor extends MovingLineProcessor {
         
         
         return {stop, state}
+    }
+}
+
+class WhereLineProcessor extends BaseLineProcessor {
+
+    protected willStop(line: string): boolean {
+        return super.willStop(line);
+    }
+
+    process(line: string, _state: JdbState): LineProcessResult {
+        let {stop, state} = super.process(line, _state);
+
+        try {
+            let [_] = line.match(/^\w+?\[\d+\].*/)
+            stop = true;
+        } catch(e) {}
+
+        return {stop, state};
     }
 }
