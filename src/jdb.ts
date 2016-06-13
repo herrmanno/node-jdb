@@ -12,7 +12,7 @@ interface LineProcessResult {
 }
 
 interface LineProcessor {
-    process(line: string, JdbState): LineProcessResult;
+    process(line: string, state: JdbState): LineProcessResult;
 }
 
 export enum JdbRunningState {
@@ -31,11 +31,22 @@ export interface JdbStateBreakpoints {
     }
 }
 
+export interface JdbStackFrame {
+    nr: number;
+    className: string;
+    methodName: string;
+    fileName: string;
+    lineNr: number;
+}
+
+export interface JdbFramesState  extends Array<JdbStackFrame> {}
+
 export interface JdbState {
     currentClass?: string;
     currentLine?: number;
     breakpoints?: JdbStateBreakpoints;
-    running?: JdbRunningState
+    running?: JdbRunningState;
+    frames?: JdbFramesState;
 }
 
 export class Jdb {
@@ -53,7 +64,7 @@ export class Jdb {
         this.state.currentClass = mainClass;
         this.state.currentLine = 1;
 
-        let jdbOptions = ["-launch", mainClass];
+        let jdbOptions = [];
         let spawnOptions: SpawnOptions = {};
         if(options) {
             if(options.workingDir) {
@@ -64,6 +75,8 @@ export class Jdb {
                 jdbOptions.push(options.classPath);
             }
         }
+
+        jdbOptions.push("-launch", mainClass);
 
         this.jdb = spawn("jdb", jdbOptions, spawnOptions);
         this.reader = createInterface({input: this.jdb.stdout});
@@ -155,6 +168,7 @@ export class Jdb {
                 resolve();
             };
             this.processor = new WhereLineProcessor();
+            this.state.frames = new Array<JdbStackFrame>();
             this.write(`where ${threadId}\n`);
         });
     }
@@ -327,6 +341,14 @@ class WhereLineProcessor extends BaseLineProcessor {
 
         try {
             let [_] = line.match(/^\w+?\[\d+\].*/)
+            stop = true;
+        } catch(e) {}
+
+        try {
+            let [_, nr, className, methodName, fileName, lineNr] = line.match(/\[(\d+)\] ([\w.]+)\.(\w+) \((.*):(\d+)\)/)
+            state.frames.push({
+                nr: +nr, className, methodName, fileName, lineNr: +lineNr
+            })
             stop = true;
         } catch(e) {}
 
