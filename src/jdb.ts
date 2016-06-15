@@ -1,18 +1,10 @@
 import {spawn, SpawnOptions, ChildProcess} from "child_process"
 import {createInterface, ReadLine} from "readline"
+import {LineProcessor, BaseLineProcessor, StopAtLineProcessor, StepLineProcessor, ContLineProcessor, WhereLineProcessor} from "./processor"
 
 export interface LaunchOptions {
     workingDir?: string;
     classPath?: string;
-}
-
-interface LineProcessResult {
-    stop: boolean;
-    state: JdbState
-}
-
-interface LineProcessor {
-    process(line: string, JdbState): LineProcessResult;
 }
 
 export enum JdbRunningState {
@@ -48,7 +40,7 @@ export class Jdb {
     private state: JdbState = {};
     private _terminated = false;
 
-    public launch(mainClass: string, options?: LaunchOptions): Promise<any> {
+    public launch(mainClass: string, options?: LaunchOptions): Promise<void> {
 
         this.state.currentClass = mainClass;
         this.state.currentLine = 1;
@@ -72,8 +64,8 @@ export class Jdb {
         return this.getReady();
     }
 
-    private getReady(): Promise<any> {
-        return new Promise((resolve, reject) => {
+    private getReady(): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
             this.readingFinish = () => {
                 resolve();
             };
@@ -119,6 +111,10 @@ export class Jdb {
         this.jdb.stdin.write(data);
     }
 
+    /**************************************************************
+     *                      COMMANDS
+     *************************************************************/
+
     public stopAt(className: string, line: number): Promise<any> {
         return new Promise((resolve, reject) => {
             this.readingFinish = () => {
@@ -159,177 +155,4 @@ export class Jdb {
         });
     }
 
-}
-
-class BaseLineProcessor implements LineProcessor {
-
-    protected setBreakpoint(state: JdbState, className: string, lineNr: number|string, data: {valid?: boolean, reason?: string}): void {
-        state.breakpoints = state.breakpoints || {};
-        state.breakpoints[className] = state.breakpoints[className] || {};
-        state.breakpoints[className][lineNr+""] = state.breakpoints[className][lineNr+""] || {};
-        
-        if((<Object>data).hasOwnProperty("valid")) {
-            state.breakpoints[className][lineNr+""].valid = data.valid;
-        }
-        if((<Object>data).hasOwnProperty("reason")) {
-            state.breakpoints[className][lineNr+""].valid = data.reason;
-        }
-    }
-
-    protected willStop(line: string): boolean {
-        return !line || !line.length;
-    }
-
-    process(line: string, state: JdbState): LineProcessResult {
-        let stop = this.willStop(line);
-
-        try {
-            let [_, className, lineNr, reason] = line.match(/Unable to set deferred breakpoint (\w+):(\d+) : (.+)$/)
-            this.setBreakpoint(state, className, lineNr, {valid: false, reason});
-        } catch(e) {}
-
-        try {
-            let [_, className, lineNr] = line.match(/Set deferred breakpoint (\w+?):(\d+?)/)
-            this.setBreakpoint(state, className, lineNr, {valid: false});
-
-        } catch(e) {}
-        
-        return {stop, state}
-    }
-}
-
-class MovingLineProcessor extends BaseLineProcessor {
-
-    protected exceptionOccured = false;
-
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
-
-        try {
-            let [_, className, lineNr, reason] = line.match(/Unable to set deferred breakpoint (\w+):(\d+) : (.+)$/)
-            this.setBreakpoint(state, className, lineNr, {valid: false, reason});
-        } catch(e) {}
-
-        try {
-            let [_, className, lineNr] = line.match(/Set deferred breakpoint (\w+?):(\d+?)/)
-            this.setBreakpoint(state, className, lineNr, {valid: false});
-
-        } catch(e) {}
-
-        try {
-            let [_, exceptionClass, caught, className, lineNr] = line.match(/Exception occurred: ([\w\.]+) \((\w+)\).*?, (\w+).*? line=(\d+)/);
-            state.currentClass = className;
-            state.currentLine = +lineNr;
-            state.running = caught ? JdbRunningState.CAUGHT_EXCEPTION : JdbRunningState.UNCAUGHT_EXCEPTION
-
-            this.exceptionOccured = true;
-        } catch(e) {}
-        
-        return {stop, state}
-    }
-}
-
-class StopAtLineProcessor extends BaseLineProcessor {
-
-    protected willStop(line: string): boolean {
-        return super.willStop(line) || !!line.match(/It will be set after the class is loaded/);
-    }
-
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
-
-        try {
-            let [_, className, lineNr, reason] = line.match(/Unable to set breakpoint (\w+?):(\d+) : (.+)$/)
-            this.setBreakpoint(state, className, lineNr, {valid: false, reason})
-
-            stop = true;
-        } catch(e) {}
-
-        try {
-            let [_, className, lineNr] = line.match(/Set breakpoint (\w+?):(\d+)/)
-            this.setBreakpoint(state, className, lineNr, {valid: true})
-            stop = true;
-
-        } catch(e) {}
-
-        try {
-            let [_, className, lineNr] = line.match(/Deferring breakpoint (\w+?):(\d+)/)
-            this.setBreakpoint(state, className, lineNr, {valid: false})
-
-        } catch(e) {}
-        
-        return {stop, state};
-    }
-}
-
-class StepLineProcessor extends MovingLineProcessor {
-
-    protected willStop(line: string): boolean {
-        return super.willStop(line);
-    }
-
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
-        
-        try {
-            let [_, currentClass, currentLine] = line.match(/.*?, (\w+).*?line=(\d+)/);
-            state.currentClass = currentClass;
-            state.currentLine = +currentLine;
-        } catch(e) {/*do nothing - the given line was just not the one...*/}
-        
-        
-        return {stop, state}
-    }
-}
-
-class ContLineProcessor extends MovingLineProcessor {
-
-    private breakpointHit = false;
-
-    protected willStop(line: string): boolean {
-        return super.willStop(line) && (this.breakpointHit || this.exceptionOccured);
-    }
-
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
-        
-        try {
-            let [_, currentClass, currentLine] = line.match(/Breakpoint hit.*?, (\w+).*?line=(\d+)/);
-            state.currentClass = currentClass;
-            state.currentLine = +currentLine;
-            state.running = JdbRunningState.BREAKPOINT_HIT;
-
-            this.breakpointHit = true;
-        } catch(e) {/*do nothing - the given line was just not the one...*/}
-
-        try {
-            let [_, currentClass, currentLine] = line.match(/The application exited/);
-            state.currentClass = null;
-            state.currentLine = null;
-            state.running = JdbRunningState.TERMINATED;
-
-            stop = true;
-        } catch(e) {/*do nothing - the given line was just not the one...*/}
-        
-        
-        return {stop, state}
-    }
-}
-
-class WhereLineProcessor extends BaseLineProcessor {
-
-    protected willStop(line: string): boolean {
-        return super.willStop(line);
-    }
-
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
-
-        try {
-            let [_] = line.match(/^\w+?\[\d+\].*/)
-            stop = true;
-        } catch(e) {}
-
-        return {stop, state};
-    }
 }
