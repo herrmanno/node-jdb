@@ -10,22 +10,19 @@ const jdb = new Jdb();
 (function() {
 
     jdb.launch("Main", {
-        workingDir: resolve(__dirname, "..", "..", "java")
+        workingDir: resolve(__dirname, "..", "java")
     })
     .then(_ => jdb.stopAt("Main", 4))
-    .then(_ => console.dir(jdb.getState()))
     .then(_ => jdb.stopAt("Main", 42))
-    .then(_ => console.dir(jdb.getState()))
     .then(_ => jdb.cont())
-    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.where())
     .then(_ => jdb.stopAt("Main", 7))
-    .then(_ => console.dir(jdb.getState()))
     .then(_ => jdb.step())
-    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.where())
     .then(_ => jdb.cont())
-    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.where())
     .then(_ => jdb.cont())
-    .then(_ => console.dir(jdb.getState()))
+    .then(_ => jdb.where())
     .then(_ => {
         process.exit(0);
     })

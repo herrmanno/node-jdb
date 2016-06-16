@@ -6,9 +6,11 @@ export class ContLineProcessor extends MovingLineProcessor {
 
     private breakpointHit = false;
 
+    /*
     protected willStop(line: string): boolean {
         return super.willStop(line) && (this.breakpointHit || this.exceptionOccured);
     }
+    */
 
     process(line: string, _state: JdbState): LineProcessResult {
         let {stop, state} = super.process(line, _state);
@@ -28,7 +30,6 @@ export class ContLineProcessor extends MovingLineProcessor {
             state.currentLine = null;
             state.running = JdbRunningState.TERMINATED;
 
-            stop = true;
         } catch(e) {/*do nothing - the given line was just not the one...*/}
         
         

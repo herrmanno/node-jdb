@@ -17,7 +17,9 @@ export class BaseLineProcessor implements LineProcessor {
     }
 
     protected willStop(line: string): boolean {
-        return !line || !line.length;
+        //return !line || !line.length;
+        //return line.indexOf(`"STOP" = "STOP"`) > -1;
+        return !!line.match(/^[\s>]+$/);
     }
 
     process(line: string, state: JdbState): LineProcessResult {

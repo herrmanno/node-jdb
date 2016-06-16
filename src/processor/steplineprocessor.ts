@@ -4,10 +4,6 @@ import {JdbState} from "../jdb"
 
 export class StepLineProcessor extends MovingLineProcessor {
 
-    protected willStop(line: string): boolean {
-        return super.willStop(line);
-    }
-
     process(line: string, _state: JdbState): LineProcessResult {
         let {stop, state} = super.process(line, _state);
         

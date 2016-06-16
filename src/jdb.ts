@@ -44,7 +44,7 @@ export interface JdbState {
 export class Jdb {
 
     private jdb: ChildProcess;
-    private reader: ReadLine;
+    private data: string;
     private processor: LineProcessor;
     private readingFinish: Function;
     private stdoutReady = false;
@@ -71,7 +71,6 @@ export class Jdb {
         jdbOptions.push("-launch", mainClass);
 
         this.jdb = spawn("jdb", jdbOptions, spawnOptions);
-        this.reader = createInterface({input: this.jdb.stdout});
         this.initReaderListeners();
 
         return this.getReady();
@@ -93,11 +92,18 @@ export class Jdb {
 
     private terminate(): void {
         this._terminated = true;
-        this.reader.removeAllListeners("line");
     }
 
     private initReaderListeners(): void {
-        this.reader.on("line", this.onLine.bind(this));
+        this.jdb.stdout.on("data", (data:Buffer) => {
+            this.data += data.toString("utf-8");
+            if(!!this.data.match(/main\[1\] $/) || this.data.match(/\r?\nThe application exited\r?\n/)) {
+                let lines = this.data.split(/\n\r?/);
+                lines.forEach(this.onLine.bind(this));
+                this.processor = void 0;
+                this.readingFinish && this.readingFinish();
+            } 
+        });
     }
 
     public getState(): JdbState {
@@ -106,13 +112,11 @@ export class Jdb {
 
     protected onLine(line: string): void {
 
-        let result = this.processor ? this.processor.process(line, this.state): void 0;
+        console.log(line);
+
+        let result = this.processor ? this.processor.process(line, this.state) : void 0;
         if(result) {
             this.state = result.state;
-            if(result.stop) {
-                this.processor = void 0;
-                this.readingFinish && this.readingFinish();
-            }
             if(result.state.running === JdbRunningState.TERMINATED) {
                 this.terminate();
             }
@@ -121,6 +125,7 @@ export class Jdb {
     }
 
     private write(data: string): void {
+        this.data = "";
         this.jdb.stdin.write(data);
     }
 
@@ -145,6 +150,36 @@ export class Jdb {
             };
             this.processor = new StepLineProcessor();
             this.write("step\n");
+        });
+    }
+
+    public stepI(): Promise<any> {
+        return new Promise((resolve, reject) => {
+            this.readingFinish = () => {
+                resolve();
+            };
+            this.processor = new StepLineProcessor();
+            this.write("stepi\n");
+        });
+    }
+
+    public stepUp(): Promise<any> {
+        return new Promise((resolve, reject) => {
+            this.readingFinish = () => {
+                resolve();
+            };
+            this.processor = new StepLineProcessor();
+            this.write("step up\n");
+        });
+    }
+
+    public next(): Promise<any> {
+        return new Promise((resolve, reject) => {
+            this.readingFinish = () => {
+                resolve();
+            };
+            this.processor = new StepLineProcessor();
+            this.write("next\n");
         });
     }
 
