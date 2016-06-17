@@ -1,38 +1,34 @@
-import {LineProcessResult} from "./base/lineprocessor"
-import {MovingLineProcessor} from "./base/movinglineprocessor"
+import {LineProcessor} from "./base/lineprocessor"
+import {MovingLineProcessor, MovingResult} from "./base/movinglineprocessor"
 import {JdbState, JdbRunningState} from "../jdb"
 
-export class ContLineProcessor extends MovingLineProcessor {
+export interface ContResult extends MovingResult {
+    breakpointHit: boolean;
+    applicationExited: boolean;
+}
+
+export class ContLineProcessor extends MovingLineProcessor implements LineProcessor<ContResult> {
 
     private breakpointHit = false;
+    private applicationExited = false;
 
-    /*
-    protected willStop(line: string): boolean {
-        return super.willStop(line) && (this.breakpointHit || this.exceptionOccured);
+    public result(): ContResult {
+        let assign = Object["assign"].bind(Object);
+        return assign({}, super.result(), {
+            breakpointHit: this.breakpointHit,
+            applicationExited: this.applicationExited
+        });
     }
-    */
 
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
-        
+    process(line: string) {
         try {
             let [_, currentClass, currentLine] = line.match(/Breakpoint hit.*?, (\w+).*?line=(\d+)/);
-            state.currentClass = currentClass;
-            state.currentLine = +currentLine;
-            state.running = JdbRunningState.BREAKPOINT_HIT;
-
             this.breakpointHit = true;
         } catch(e) {/*do nothing - the given line was just not the one...*/}
 
         try {
             let [_, currentClass, currentLine] = line.match(/The application exited/);
-            state.currentClass = null;
-            state.currentLine = null;
-            state.running = JdbRunningState.TERMINATED;
-
+            this.applicationExited = true;
         } catch(e) {/*do nothing - the given line was just not the one...*/}
-        
-        
-        return {stop, state}
     }
 }

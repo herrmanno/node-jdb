@@ -1,19 +1,26 @@
-import {LineProcessResult} from "./base/lineprocessor"
-import {MovingLineProcessor} from "./base/movinglineprocessor"
+import {LineProcessor} from "./base/lineprocessor"
+import {MovingLineProcessor, MovingResult} from "./base/movinglineprocessor"
 import {JdbState} from "../jdb"
 
-export class StepLineProcessor extends MovingLineProcessor {
+export interface StepResult extends MovingResult {
+    stepCompleted: boolean;
+}
 
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
-        
+export class StepLineProcessor extends MovingLineProcessor implements LineProcessor<StepResult> {
+
+    public result(): StepResult {
+        let assign = Object["assign"].bind(Object);
+        return assign({}, super.result(), {
+            stepCompleted: this.stepCompleted
+        });
+    }
+
+    protected stepCompleted = false;
+
+    process(line: string) {
         try {
-            let [_, currentClass, currentLine] = line.match(/.*?, (\w+).*?line=(\d+)/);
-            state.currentClass = currentClass;
-            state.currentLine = +currentLine;
+            let [_, currentClass, currentLine] = line.match(/^Step completed/);
+            this.stepCompleted = true;
         } catch(e) {/*do nothing - the given line was just not the one...*/}
-        
-        
-        return {stop, state}
     }
 }

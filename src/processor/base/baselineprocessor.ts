@@ -1,41 +1,57 @@
-import {LineProcessor, LineProcessResult} from "./lineprocessor"
+import {LineProcessor} from "./lineprocessor"
 import {JdbState} from "../../jdb"
 
-export class BaseLineProcessor implements LineProcessor {
+export interface BaseResult {
+    breakpoints: Array<{className: string, lineNr: number, valid: boolean}>; 
+}
 
-    protected setBreakpoint(state: JdbState, className: string, lineNr: number|string, data: {valid?: boolean, reason?: string}): void {
-        state.breakpoints = state.breakpoints || {};
-        state.breakpoints[className] = state.breakpoints[className] || {};
-        state.breakpoints[className][lineNr+""] = state.breakpoints[className][lineNr+""] || {};
-        
-        if((<Object>data).hasOwnProperty("valid")) {
-            state.breakpoints[className][lineNr+""].valid = data.valid;
-        }
-        if((<Object>data).hasOwnProperty("reason")) {
-            state.breakpoints[className][lineNr+""].valid = data.reason;
-        }
+export class BaseLineProcessor implements LineProcessor<BaseResult> {
+
+    protected breakpoints: Array<{className: string, lineNr: number, valid: boolean}> = [];
+
+    public result(): BaseResult {
+        return {
+            breakpoints: this.breakpoints
+        };
     }
 
-    protected willStop(line: string): boolean {
-        //return !line || !line.length;
-        //return line.indexOf(`"STOP" = "STOP"`) > -1;
-        return !!line.match(/^[\s>]+$/);
-    }
-
-    process(line: string, state: JdbState): LineProcessResult {
-        let stop = this.willStop(line);
-
+    process(line: string) {
         try {
             let [_, className, lineNr, reason] = line.match(/Unable to set deferred breakpoint (\w+):(\d+) : (.+)$/)
-            this.setBreakpoint(state, className, lineNr, {valid: false, reason});
+            this.breakpoints.push({
+                className,
+                lineNr: +lineNr,
+                valid: false
+            });
         } catch(e) {}
 
         try {
             let [_, className, lineNr] = line.match(/Set deferred breakpoint (\w+?):(\d+?)/)
-            this.setBreakpoint(state, className, lineNr, {valid: false});
-
+            this.breakpoints.push({
+                className,
+                lineNr: +lineNr,
+                valid: true
+            });
         } catch(e) {}
-        
-        return {stop, state}
+    }
+
+    protected setBreakpoint(className: string, lineNr: number, valid: boolean) {
+        let exists = false;
+
+        this.breakpoints = this.breakpoints.map(br => {
+            if(br.className === className && br.lineNr === br.lineNr) {
+                br.valid = valid;
+                exists = true;
+                return br;
+            }
+        });
+
+        if(!exists) {
+            this.breakpoints.push({
+                className,
+                lineNr,
+                valid
+            })
+        }
     }
 }

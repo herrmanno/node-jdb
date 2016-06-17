@@ -1,34 +1,38 @@
-import {LineProcessResult} from "./lineprocessor"
-import {BaseLineProcessor} from "./baselineprocessor"
+import {LineProcessor} from "./lineprocessor"
+import {BaseLineProcessor, BaseResult} from "./baselineprocessor"
 import {JdbState, JdbRunningState} from "../../jdb"
 
-export class MovingLineProcessor extends BaseLineProcessor {
+export interface MovingResult extends BaseResult {
+    caughtException: boolean;
+    uncaughtException: boolean;
+}
 
-    protected exceptionOccured = false;
+export class MovingLineProcessor extends BaseLineProcessor implements LineProcessor<MovingResult> {
 
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
+    protected caughtException = false;
+    protected uncaughtException = false;
 
-        try {
-            let [_, className, lineNr, reason] = line.match(/Unable to set deferred breakpoint (\w+):(\d+) : (.+)$/)
-            this.setBreakpoint(state, className, lineNr, {valid: false, reason});
-        } catch(e) {}
+    public result(): MovingResult {
+        let assign = Object["assign"].bind(Object);
+        return assign({}, super.result(), {
+            caughtException: this.caughtException,
+            uncaughtException: this.uncaughtException,
+        });
+    }
 
-        try {
-            let [_, className, lineNr] = line.match(/Set deferred breakpoint (\w+?):(\d+?)/)
-            this.setBreakpoint(state, className, lineNr, {valid: false});
-
-        } catch(e) {}
-
+    process(line: string) {
         try {
             let [_, exceptionClass, caught, className, lineNr] = line.match(/Exception occurred: ([\w\.]+) \((\w+)\).*?, (\w+).*? line=(\d+)/);
-            state.currentClass = className;
-            state.currentLine = +lineNr;
-            state.running = caught ? JdbRunningState.CAUGHT_EXCEPTION : JdbRunningState.UNCAUGHT_EXCEPTION
-
-            this.exceptionOccured = true;
+            switch (caught.toUpperCase()) {
+                case "CAUGHT":
+                    this.caughtException = true;
+                    break;
+                case "UNCAUGHT":
+                    this.uncaughtException = true;
+                    break;
+                default:
+                    break;
+            }
         } catch(e) {}
-        
-        return {stop, state}
     }
 }

@@ -1,6 +1,6 @@
 import {spawn, SpawnOptions, ChildProcess} from "child_process"
 import {createInterface, ReadLine} from "readline"
-import {LineProcessor, BaseLineProcessor, StopAtLineProcessor, StepLineProcessor, ContLineProcessor, WhereLineProcessor} from "./processor"
+import {LineProcessor, BaseLineProcessor, StopAtLineProcessor, StopAtResult, StepLineProcessor, StepResult, ContLineProcessor, ContResult, WhereLineProcessor, WhereResult} from "./processor"
 
 export interface LaunchOptions {
     workingDir?: string;
@@ -45,7 +45,7 @@ export class Jdb {
 
     private jdb: ChildProcess;
     private data: string;
-    private processor: LineProcessor;
+    private processor: LineProcessor<any>;
     private readingFinish: Function;
     private stdoutReady = false;
     private state: JdbState = {};
@@ -86,18 +86,14 @@ export class Jdb {
         });
     }
 
-    public get terminated(): boolean {
-        return this._terminated
-    }
-
-    private terminate(): void {
-        this._terminated = true;
+        private get commandCompleted(): boolean {
+        return !!this.data.match(/\w+\[\d+\] $/) || !!this.data.match(/\r?\nThe application exited\r?\n/);
     }
 
     private initReaderListeners(): void {
         this.jdb.stdout.on("data", (data:Buffer) => {
             this.data += data.toString("utf-8");
-            if(!!this.data.match(/main\[1\] $/) || this.data.match(/\r?\nThe application exited\r?\n/)) {
+            if(this.commandCompleted) {
                 let lines = this.data.split(/\n\r?/);
                 lines.forEach(this.onLine.bind(this));
                 this.processor = void 0;
@@ -111,17 +107,7 @@ export class Jdb {
     }
 
     protected onLine(line: string): void {
-
-        console.log(line);
-
-        let result = this.processor ? this.processor.process(line, this.state) : void 0;
-        if(result) {
-            this.state = result.state;
-            if(result.state.running === JdbRunningState.TERMINATED) {
-                this.terminate();
-            }
-        }
-
+        this.processor && this.processor.process(line);
     }
 
     private write(data: string): void {
@@ -133,73 +119,72 @@ export class Jdb {
      *                      COMMANDS
      *************************************************************/
 
-    public stopAt(className: string, line: number): Promise<any> {
-        return new Promise((resolve, reject) => {
+    public stopAt(className: string, line: number): Promise<StopAtResult> {
+        return new Promise<StopAtResult>((resolve, reject) => {
             this.readingFinish = () => {
-                resolve();
+                resolve(processor.result());
             };
-            this.processor = new StopAtLineProcessor();
+            let processor = this.processor = new StopAtLineProcessor();
             this.write(`stop at ${className}:${line}\n`);
         });
     }
 
-    public step(): Promise<any> {
-        return new Promise((resolve, reject) => {
+    public step(): Promise<StepResult> {
+        return new Promise<StepResult>((resolve, reject) => {
             this.readingFinish = () => {
-                resolve();
+                resolve(processor.result());
             };
-            this.processor = new StepLineProcessor();
+            let processor = this.processor = new StepLineProcessor();
             this.write("step\n");
         });
     }
 
-    public stepI(): Promise<any> {
-        return new Promise((resolve, reject) => {
+    public stepI(): Promise<StepResult> {
+        return new Promise<StepResult>((resolve, reject) => {
             this.readingFinish = () => {
-                resolve();
+                resolve(processor.result());
             };
-            this.processor = new StepLineProcessor();
+            let processor = this.processor = new StepLineProcessor();
             this.write("stepi\n");
         });
     }
 
-    public stepUp(): Promise<any> {
-        return new Promise((resolve, reject) => {
+    public stepUp(): Promise<StepResult> {
+        return new Promise<StepResult>((resolve, reject) => {
             this.readingFinish = () => {
-                resolve();
+                resolve(processor.result());
             };
-            this.processor = new StepLineProcessor();
+            let processor = this.processor = new StepLineProcessor();
             this.write("step up\n");
         });
     }
 
-    public next(): Promise<any> {
-        return new Promise((resolve, reject) => {
+    public next(): Promise<StepResult> {
+        return new Promise<StepResult>((resolve, reject) => {
             this.readingFinish = () => {
-                resolve();
+                resolve(processor.result());
             };
-            this.processor = new StepLineProcessor();
+            let processor = this.processor = new StepLineProcessor();
             this.write("next\n");
         });
     }
 
-    public cont(): Promise<any> {
-        return new Promise((resolve, reject) => {
+    public cont(): Promise<ContResult> {
+        return new Promise<ContResult>((resolve, reject) => {
             this.readingFinish = () => {
-                resolve();
+                resolve(processor.result());
             };
-            this.processor = new ContLineProcessor();
+            let processor = this.processor = new ContLineProcessor();
             this.write(`cont\n`);
         });
     }
 
-    public where(threadId: number = 1): Promise<any> {
-        return new Promise((resolve, reject) => {
+    public where(threadId: number = 1): Promise<WhereResult> {
+        return new Promise<WhereResult>((resolve, reject) => {
             this.readingFinish = () => {
-                resolve();
+                resolve(processor.result());
             };
-            this.processor = new WhereLineProcessor();
-            this.state.frames = new Array<JdbStackFrame>();
+            let processor = this.processor = new WhereLineProcessor();
             this.write(`where ${threadId}\n`);
         });
     }

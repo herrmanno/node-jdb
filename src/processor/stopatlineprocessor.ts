@@ -1,32 +1,28 @@
-import {LineProcessResult} from "./base/lineprocessor"
-import {BaseLineProcessor} from "./base/baselineprocessor"
+import {LineProcessor} from "./base/lineprocessor"
+import {BaseLineProcessor, BaseResult} from "./base/baselineprocessor"
 import {JdbState} from "../jdb"
 
-export class StopAtLineProcessor extends BaseLineProcessor {
-    /*
-    protected willStop(line: string): boolean {
-        return super.willStop(line) || !!line.match(/It will be set after the class is loaded/);
-    }
-    */
+export interface StopAtResult extends BaseResult {
 
-    process(line: string, _state: JdbState): LineProcessResult {
-        let {stop, state} = super.process(line, _state);
+}
 
+export class StopAtLineProcessor extends BaseLineProcessor implements LineProcessor<StopAtResult> {
+
+    process(line: string) {
         try {
             let [_, className, lineNr, reason] = line.match(/Unable to set breakpoint (\w+?):(\d+) : (.+)$/)
-            this.setBreakpoint(state, className, lineNr, {valid: false, reason})
+            this.setBreakpoint(className, +lineNr, false);
         } catch(e) {}
 
         try {
             let [_, className, lineNr] = line.match(/Set breakpoint (\w+?):(\d+)/)
-            this.setBreakpoint(state, className, lineNr, {valid: true})
+            this.setBreakpoint(className, +lineNr, true);
         } catch(e) {}
 
         try {
             let [_, className, lineNr] = line.match(/Deferring breakpoint (\w+?):(\d+)/)
-            this.setBreakpoint(state, className, lineNr, {valid: false})
+            this.setBreakpoint(className, +lineNr, false);
         } catch(e) {}
         
-        return {stop, state};
     }
 }
